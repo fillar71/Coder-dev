@@ -62,7 +62,7 @@ const GeminiAssistant: React.FC<GeminiAssistantProps> = ({ code, onCodeUpdate })
           </div>
           <div>
             <h2 className="font-semibold text-gray-800">Gemini Assistant</h2>
-            <p className="text-xs text-gray-500">Powered by gemini-3-pro</p>
+            <p className="text-xs text-gray-500">Powered by gemini-2.0-flash</p>
           </div>
         </div>
         

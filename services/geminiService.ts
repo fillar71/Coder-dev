@@ -18,7 +18,7 @@ export const chatWithAI = async (
   newMessage: string
 ): Promise<AIResponse> => {
   try {
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-2.0-flash-exp';
     
     const systemInstruction = `
       You are an expert AI Fullstack Developer using Next.js, React, and Tailwind CSS.
@@ -92,7 +92,7 @@ export const chatWithAI = async (
 
 export const generateCodeRefinement = async (code: string, instructions: string): Promise<string> => {
   try {
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-2.0-flash-exp';
     const prompt = `
       You are an expert software engineer.
       
@@ -125,7 +125,7 @@ export const generateCodeRefinement = async (code: string, instructions: string)
 
 export const askGeminiExplanation = async (code: string, question: string): Promise<string> => {
   try {
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-2.0-flash-exp';
     const prompt = `
       You are an expert software engineer.
       
