@@ -1,0 +1,5 @@
+{
+  "name": "Next.js Octokit Route Generator",
+  "description": "A developer tool to generate and customize Next.js API Route Handlers for GitHub operations using Gemini.",
+  "requestFramePermissions": []
+}
