@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Github, Bot, User, Loader2, Terminal, MessageSquare, Eye, Layers, Code, PlusCircle, History } from 'lucide-react';
+import { Send, Github, Bot, User, Loader2, Terminal, MessageSquare, Eye, Code, PlusCircle, History, Layers } from 'lucide-react';
 import { chatWithAI, AIResponse } from './services/geminiService';
 import { chatHistoryService, ChatSession } from './services/chatHistoryService';
 import CodePreview from './components/CodePreview';
 import CommitCard from './components/CommitCard';
 import CodeEditor from './components/CodeEditor';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
+import ModelSelector from './components/ModelSelector';
+import { AIModelConfig, AVAILABLE_MODELS } from './types';
 
 interface Message {
   id: string;
@@ -26,6 +28,10 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'chat' | 'editor' | 'preview'>('chat');
   const [currentCode, setCurrentCode] = useState<string>('');
+  
+  // Model State
+  // Default to Gemini 2.0 Flash
+  const [currentModel, setCurrentModel] = useState<AIModelConfig>(AVAILABLE_MODELS[0]);
   
   // History State
   const [showHistory, setShowHistory] = useState(false);
@@ -137,7 +143,8 @@ const App: React.FC = () => {
       // Prepare history for API
       const history = messages.map(m => ({ role: m.role, text: m.content }));
 
-      const response = await chatWithAI(history, userContent);
+      // Call AI with current Model Configuration
+      const response = await chatWithAI(history, userContent, currentModel);
       
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -245,7 +252,10 @@ const App: React.FC = () => {
                 <PlusCircle size={16} />
               </button>
             </div>
-            <p className="text-xs text-gray-500 font-medium hidden sm:block">Connected to api/commit.ts</p>
+            {/* Model Selector placed in header subtile area for mobile or next to title */}
+            <div className="mt-1">
+               <ModelSelector currentModel={currentModel} onSelect={setCurrentModel} />
+            </div>
           </div>
         </div>
 
@@ -347,7 +357,9 @@ const App: React.FC = () => {
             <div className="flex justify-start max-w-5xl mx-auto pl-14">
               <div className="bg-white border border-gray-200 px-4 py-2 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-2">
                 <Loader2 size={16} className="animate-spin text-blue-500" />
-                <span className="text-xs text-gray-400 font-medium">Generating code...</span>
+                <span className="text-xs text-gray-400 font-medium">
+                  Generating with <span className="font-semibold">{currentModel.name}</span>...
+                </span>
               </div>
             </div>
           )}
@@ -396,7 +408,7 @@ const App: React.FC = () => {
             placeholder={
               viewMode === 'preview' ? "Request changes to the preview..." : 
               viewMode === 'editor' ? "Ask for help with the code..." :
-              "Describe the feature you want to build..."
+              `Ask ${currentModel.name} to build something...`
             }
             className="w-full pl-5 pr-14 py-4 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm placeholder:text-gray-400"
           />
@@ -409,7 +421,7 @@ const App: React.FC = () => {
           </button>
         </form>
         <p className="text-center text-[10px] text-gray-400 mt-3">
-          AI generated code can be incorrect. Please review before committing.
+          Using {currentModel.name}. AI generated code can be incorrect.
         </p>
       </div>
     </div>
