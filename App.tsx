@@ -206,7 +206,6 @@ const App: React.FC = () => {
       }
 
       // Optional: You could show a toast here with result.html_url
-      return true;
     } catch (error: any) {
       console.error('Commit API Error:', error);
       throw error; // Propagate error to CommitCard for display
