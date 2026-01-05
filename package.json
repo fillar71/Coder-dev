@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@codesandbox/sandpack-react": "^2.19.0",
-    "@google/genai": "^0.1.2",
+    "@google/genai": "*",
     "@octokit/rest": "^21.0.0",
     "@supabase/supabase-js": "^2.45.0",
     "lucide-react": "^0.454.0",
