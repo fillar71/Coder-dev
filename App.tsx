@@ -179,15 +179,31 @@ const App: React.FC = () => {
       throw new Error("Invalid commit data: missing content or file path.");
     }
 
-    await new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (data.commit_message?.toLowerCase().includes('fail')) {
-          reject(new Error('GitHub API responded with 401 Unauthorized: Bad credentials.'));
-        } else {
-          resolve(true);
-        }
-      }, 1500);
-    });
+    try {
+      const response = await fetch('/api/commit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          file_path: data.file_path,
+          new_content: data.new_content,
+          commit_message: data.commit_message || `Update ${data.file_path}`
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to commit changes');
+      }
+
+      // Optional: You could show a toast here with result.html_url
+      return true;
+    } catch (error: any) {
+      console.error('Commit API Error:', error);
+      throw error; // Propagate error to CommitCard for display
+    }
   };
 
   return (
@@ -229,7 +245,7 @@ const App: React.FC = () => {
                 <PlusCircle size={16} />
               </button>
             </div>
-            <p className="text-xs text-gray-500 font-medium hidden sm:block">Connected to app/api/commit/route.ts</p>
+            <p className="text-xs text-gray-500 font-medium hidden sm:block">Connected to api/commit.ts</p>
           </div>
         </div>
 

@@ -1,5 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Initialize the Google GenAI client
+// The API key must be obtained exclusively from process.env.API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface AIResponse {
@@ -18,7 +20,15 @@ export const chatWithAI = async (
   newMessage: string
 ): Promise<AIResponse> => {
   try {
-    const model = 'gemini-2.0-flash-exp';
+    if (!process.env.API_KEY) {
+      return {
+        text: "Configuration Error: `API_KEY` is missing. Please check your `.env` file or Vercel Environment Variables.",
+        structuredData: null
+      };
+    }
+
+    // Use 'gemini-3-pro-preview' for complex text tasks (coding)
+    const model = 'gemini-3-pro-preview';
     
     const systemInstruction = `
       You are an expert AI Fullstack Developer using Next.js, React, and Tailwind CSS.
@@ -45,10 +55,6 @@ export const chatWithAI = async (
     `;
 
     // Construct the conversation history for the context
-    // We add the system instruction to the prompt context implicitly via specific prompt engineering
-    // or by using the systemInstruction config if supported, but here we'll append to the prompt for simplicity
-    // in this stateless request wrapper.
-    
     // For this specific turn-based implementation:
     const prompt = `
       ${systemInstruction}
@@ -81,10 +87,17 @@ export const chatWithAI = async (
       return { text: rawText, structuredData: null };
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
+    const errorMessage = error.message || String(error);
+    
+    // Check for common permission/key errors
+    if (errorMessage.includes('API key not valid') || errorMessage.includes('400')) {
+        return { text: "Error: Invalid API Key. Please verify your credentials.", structuredData: null };
+    }
+
     return { 
-      text: "Sorry, I encountered an error. Please try again.", 
+      text: `Sorry, I encountered an error: ${errorMessage}. Please try again.`, 
       structuredData: null 
     };
   }
@@ -92,7 +105,9 @@ export const chatWithAI = async (
 
 export const generateCodeRefinement = async (code: string, instructions: string): Promise<string> => {
   try {
-    const model = 'gemini-2.0-flash-exp';
+    if (!process.env.API_KEY) throw new Error("API_KEY is missing");
+
+    const model = 'gemini-3-pro-preview';
     const prompt = `
       You are an expert software engineer.
       
@@ -119,13 +134,15 @@ export const generateCodeRefinement = async (code: string, instructions: string)
     return text.trim();
   } catch (error) {
     console.error("Gemini Refinement Error:", error);
-    throw new Error("Failed to refine code.");
+    throw new Error("Failed to refine code. API Key may be missing or invalid.");
   }
 };
 
 export const askGeminiExplanation = async (code: string, question: string): Promise<string> => {
   try {
-    const model = 'gemini-2.0-flash-exp';
+    if (!process.env.API_KEY) return "Error: API Key is missing.";
+
+    const model = 'gemini-3-pro-preview';
     const prompt = `
       You are an expert software engineer.
       
