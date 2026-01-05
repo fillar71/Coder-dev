@@ -27,8 +27,8 @@ export const chatWithAI = async (
       };
     }
 
-    // Use 'gemini-3-pro-preview' for complex text tasks (coding)
-    const model = 'gemini-3-pro-preview';
+    // Use 'gemini-2.0-flash' as requested for higher token limits
+    const model = 'gemini-2.0-flash';
     
     const systemInstruction = `
       You are an expert AI Fullstack Developer using Next.js, React, and Tailwind CSS.
@@ -107,7 +107,7 @@ export const generateCodeRefinement = async (code: string, instructions: string)
   try {
     if (!process.env.API_KEY) throw new Error("API_KEY is missing");
 
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-2.0-flash';
     const prompt = `
       You are an expert software engineer.
       
@@ -142,7 +142,7 @@ export const askGeminiExplanation = async (code: string, question: string): Prom
   try {
     if (!process.env.API_KEY) return "Error: API Key is missing.";
 
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-2.0-flash';
     const prompt = `
       You are an expert software engineer.
       
