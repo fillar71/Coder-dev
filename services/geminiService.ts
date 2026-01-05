@@ -12,34 +12,49 @@ export interface AIResponse {
   };
 }
 
-const SYSTEM_INSTRUCTION = `
-You are an expert AI Fullstack Developer using Next.js, React, and Tailwind CSS.
+const getSystemInstruction = (fileTree: string[]) => `
+You are an ELITE Senior Fullstack Engineer & Architect. You are not just a code generator; you are a proactive problem solver.
 
-Your goal is to help the user write code and prepare it for automated GitHub commits.
+YOUR MISSION:
+1. Help the user build, debug, and refactor Next.js (App Router), React, and Tailwind CSS applications.
+2. Prepare production-ready code for automated GitHub commits.
+3. Analyze errors deeply by understanding the project structure.
 
-RESPONSE FORMAT:
+CONTEXT - CURRENT PROJECT STRUCTURE:
+The following is a list of files currently existing in the connected repository. use this to understand imports, component locations, and architecture.
+${fileTree.length > 0 ? fileTree.join('\n') : "(No repository context linked yet. Assume standard Next.js App Router structure.)"}
+
+GUIDELINES:
+- **Creativity**: Don't just give the bare minimum. Suggest UI improvements (using Lucide icons, Tailwind gradients, glassmorphism) and UX enhancements.
+- **Project Awareness**: When suggesting a change to 'page.tsx', consider if 'globals.css' or 'layout.tsx' needs updates too. 
+- **Error Analysis**: If the user pastes an error stack trace, analyze WHICH file in the file list above is likely the culprit. Explain WHY it failed before fixing it.
+- **Code Quality**: Write clean, modular, and typed (TypeScript) code. 
+- **Preview**: Always provide a "preview_content" that is a SELF-CONTAINED React component demonstrating the UI changes, so the user can see it instantly.
+
+RESPONSE FORMAT (JSON ONLY):
 You MUST respond with a generic JSON object containing two fields:
-1. "text": A conversational response explaining what you did or answering the question.
+1. "text": A conversational, helpful, and slightly enthusiastic response. Use Markdown for bolding key points.
 2. "structuredData": A JSON object (OR null if just chatting) with:
-   - "action": "COMMIT" (if proposing code changes) or "CHAT".
-   - "file_path": The path of the file to change (e.g., "app/page.tsx").
-   - "commit_message": A concise git commit message.
-   - "new_content": The FULL source code for the file (Next.js/React code).
-   - "preview_content": (Optional) A minimal, self-contained React component string using 'export default function App() {}' that can be rendered in a live preview.
+   - "action": "COMMIT" (if proposing code changes to a SPECIFIC file) or "CHAT".
+   - "file_path": The path of the file to change (e.g., "app/page.tsx"). **MUST MATCH A PATH IN THE CONTEXT LIST IF UPDATING**.
+   - "commit_message": A semantic commit message (e.g., "feat: add dashboard layout").
+   - "new_content": The FULL source code for the file.
+   - "preview_content": (Optional but Recommended) A minimal, self-contained React component string using 'export default function App() {}' for live preview.
 
 IMPORTANT:
-- Always provide valid JSON in your response.
-- Do not wrap the JSON in markdown code blocks. Return pure JSON string.
+- Return PURE JSON string. Do not wrap in markdown code blocks.
 `;
 
 // --- Helper: Google Gemini Provider ---
-async function callGemini(modelId: string, history: any[], newMessage: string): Promise<string> {
+async function callGemini(modelId: string, history: any[], newMessage: string, fileTree: string[]): Promise<string> {
   if (!process.env.API_KEY) throw new Error("API_KEY (Google) is missing.");
   
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
+  const systemInstruction = getSystemInstruction(fileTree);
+
   const prompt = `
-      ${SYSTEM_INSTRUCTION}
+      ${systemInstruction}
 
       Current Conversation History:
       ${history.map((h: any) => `${h.role.toUpperCase()}: ${h.text}`).join('\n')}
@@ -63,7 +78,8 @@ async function callOpenAICompatible(
   provider: 'groq' | 'openai',
   modelId: string, 
   history: any[], 
-  newMessage: string
+  newMessage: string,
+  fileTree: string[]
 ): Promise<string> {
   
   let apiKey, baseUrl;
@@ -78,9 +94,11 @@ async function callOpenAICompatible(
     if (!apiKey) throw new Error("OPENAI_API_KEY is missing in .env");
   }
 
+  const systemInstruction = getSystemInstruction(fileTree);
+
   // Convert history to OpenAI format
   const messages = [
-    { role: "system", content: SYSTEM_INSTRUCTION },
+    { role: "system", content: systemInstruction },
     ...history.map((h: any) => ({
       role: h.role === 'model' ? 'assistant' : 'user',
       content: h.text
@@ -115,18 +133,19 @@ async function callOpenAICompatible(
 export const chatWithAI = async (
   history: { role: 'user' | 'model'; text: string }[],
   newMessage: string,
-  modelConfig: AIModelConfig
+  modelConfig: AIModelConfig,
+  fileTree: string[] = [] // New Argument
 ): Promise<AIResponse> => {
   try {
     let rawText = "";
 
     switch (modelConfig.provider) {
       case 'google':
-        rawText = await callGemini(modelConfig.id, history, newMessage);
+        rawText = await callGemini(modelConfig.id, history, newMessage, fileTree);
         break;
       case 'groq':
       case 'openai':
-        rawText = await callOpenAICompatible(modelConfig.provider, modelConfig.id, history, newMessage);
+        rawText = await callOpenAICompatible(modelConfig.provider, modelConfig.id, history, newMessage, fileTree);
         break;
       default:
         throw new Error("Unsupported provider");

@@ -19,6 +19,13 @@ export interface AIModelConfig {
   description: string;
 }
 
+export interface RepoConfig {
+  owner: string;
+  repo: string;
+  branch: string;
+  token?: string;
+}
+
 export const AVAILABLE_MODELS: AIModelConfig[] = [
   { 
     id: 'gemini-2.0-flash', 

@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Github, Bot, User, Loader2, Terminal, MessageSquare, Eye, Code, PlusCircle, History, Layers } from 'lucide-react';
+import { Send, Github, Bot, User, Loader2, Terminal, MessageSquare, Eye, Code, PlusCircle, History, Layers, Settings } from 'lucide-react';
 import { chatWithAI, AIResponse } from './services/geminiService';
 import { chatHistoryService, ChatSession } from './services/chatHistoryService';
+import { getRepoFileTree } from './services/githubService';
 import CodePreview from './components/CodePreview';
 import CommitCard from './components/CommitCard';
 import CodeEditor from './components/CodeEditor';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
 import ModelSelector from './components/ModelSelector';
-import { AIModelConfig, AVAILABLE_MODELS } from './types';
+import RepoConfigModal from './components/RepoConfigModal';
+import { AIModelConfig, AVAILABLE_MODELS, RepoConfig } from './types';
 
 interface Message {
   id: string;
@@ -19,7 +21,14 @@ interface Message {
 const INITIAL_MESSAGE: Message = { 
   id: '1', 
   role: 'model', 
-  content: 'Hello! I am your AI Fullstack Engineer. I can help you write React components and commit them directly to your GitHub repository via your route handler. What shall we build today?' 
+  content: 'Hello! I am your AI Fullstack Architect. Connect your GitHub repository in the settings to let me understand your project structure. What shall we build or debug today?' 
+};
+
+const DEFAULT_REPO_CONFIG: RepoConfig = {
+  owner: '',
+  repo: '',
+  branch: 'main',
+  token: ''
 };
 
 const App: React.FC = () => {
@@ -30,13 +39,18 @@ const App: React.FC = () => {
   const [currentCode, setCurrentCode] = useState<string>('');
   
   // Model State
-  // Default to Gemini 2.0 Flash
   const [currentModel, setCurrentModel] = useState<AIModelConfig>(AVAILABLE_MODELS[0]);
   
   // History State
   const [showHistory, setShowHistory] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  // Repo Configuration State
+  const [showRepoModal, setShowRepoModal] = useState(false);
+  const [repoConfig, setRepoConfig] = useState<RepoConfig>(DEFAULT_REPO_CONFIG);
+  const [repoContext, setRepoContext] = useState<string[]>([]);
+  const [isFetchingContext, setIsFetchingContext] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +70,44 @@ const App: React.FC = () => {
       loadSessions();
     }
   }, [showHistory]);
+
+  // Load repo config from local storage
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('repo_config');
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        setRepoConfig(parsed);
+        // If we have a valid config, fetch the tree
+        if (parsed.owner && parsed.repo) {
+          fetchContext(parsed);
+        }
+      } catch (e) {
+        console.error("Failed to parse repo config", e);
+      }
+    }
+  }, []);
+
+  const fetchContext = async (config: RepoConfig) => {
+    if (!config.owner || !config.repo) return;
+    
+    setIsFetchingContext(true);
+    try {
+      const files = await getRepoFileTree(config.owner, config.repo, config.branch, config.token);
+      setRepoContext(files);
+      console.log(`Loaded ${files.length} files for context.`);
+    } catch (error) {
+      console.error("Context fetch failed", error);
+    } finally {
+      setIsFetchingContext(false);
+    }
+  };
+
+  const saveRepoConfig = (config: RepoConfig) => {
+    setRepoConfig(config);
+    localStorage.setItem('repo_config', JSON.stringify(config));
+    fetchContext(config); // Refresh context on save
+  };
 
   const loadSessions = async () => {
     const loadedSessions = await chatHistoryService.getSessions();
@@ -82,14 +134,12 @@ const App: React.FC = () => {
         structuredData: m.structured_data
       }));
       
-      // If empty (shouldn't happen), use initial
       if (uiMessages.length === 0) {
         setMessages([INITIAL_MESSAGE]);
       } else {
         setMessages(uiMessages);
       }
       
-      // Restore code state from the last message that had code
       const lastCodeMessage = [...uiMessages].reverse().find(m => m.structuredData?.preview_content);
       if (lastCodeMessage?.structuredData?.preview_content) {
         setCurrentCode(lastCodeMessage.structuredData.preview_content);
@@ -122,7 +172,6 @@ const App: React.FC = () => {
     setInput('');
     setIsLoading(true);
 
-    // Session Management: Create session if it doesn't exist
     let activeSessionId = currentSessionId;
     try {
       if (!activeSessionId) {
@@ -130,21 +179,18 @@ const App: React.FC = () => {
         if (newSession) {
           activeSessionId = newSession.id;
           setCurrentSessionId(newSession.id);
-          // If we just created a session, reload the list in background if history is open
           if (showHistory) loadSessions();
         }
       }
 
-      // Save user message to Supabase
       if (activeSessionId) {
         await chatHistoryService.saveMessage(activeSessionId, 'user', userContent);
       }
 
-      // Prepare history for API
       const history = messages.map(m => ({ role: m.role, text: m.content }));
 
-      // Call AI with current Model Configuration
-      const response = await chatWithAI(history, userContent, currentModel);
+      // Pass repoContext (file tree) to AI
+      const response = await chatWithAI(history, userContent, currentModel, repoContext);
       
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -159,7 +205,6 @@ const App: React.FC = () => {
       
       setMessages(prev => [...prev, aiMessage]);
 
-      // Save AI message to Supabase
       if (activeSessionId) {
         await chatHistoryService.saveMessage(
           activeSessionId, 
@@ -204,17 +249,22 @@ const App: React.FC = () => {
       if (!response.ok) {
         throw new Error(result.error || 'Failed to commit changes');
       }
-
-      // Optional: You could show a toast here with result.html_url
     } catch (error: any) {
       console.error('Commit API Error:', error);
-      throw error; // Propagate error to CommitCard for display
+      throw error; 
     }
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
       
+      <RepoConfigModal 
+        isOpen={showRepoModal} 
+        onClose={() => setShowRepoModal(false)}
+        config={repoConfig}
+        onSave={saveRepoConfig}
+      />
+
       <ChatHistorySidebar 
         isOpen={showHistory} 
         onClose={() => setShowHistory(false)}
@@ -226,7 +276,6 @@ const App: React.FC = () => {
       {/* Header */}
       <header className="flex-none bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm z-10">
         <div className="flex items-center gap-3">
-          {/* History Toggle */}
           <button 
             onClick={() => setShowHistory(true)}
             className="p-2 mr-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
@@ -241,7 +290,7 @@ const App: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                AI Dev Chat
+                AI Architect
               </h1>
               <button 
                 onClick={handleNewChat}
@@ -251,9 +300,16 @@ const App: React.FC = () => {
                 <PlusCircle size={16} />
               </button>
             </div>
-            {/* Model Selector placed in header subtile area for mobile or next to title */}
-            <div className="mt-1">
+            <div className="mt-1 flex items-center gap-2">
                <ModelSelector currentModel={currentModel} onSelect={setCurrentModel} />
+               {repoConfig.repo ? (
+                 <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-2 py-0.5 rounded flex items-center gap-1">
+                   {isFetchingContext ? <Loader2 size={10} className="animate-spin" /> : <Github size={10} />}
+                   {repoConfig.owner}/{repoConfig.repo}
+                 </span>
+               ) : (
+                 <span className="text-[10px] text-gray-400 italic">No repo connected</span>
+               )}
             </div>
           </div>
         </div>
@@ -295,9 +351,22 @@ const App: React.FC = () => {
           </button>
         </div>
 
-        <a href="https://github.com" target="_blank" rel="noreferrer" className="text-gray-400 hover:text-gray-900 transition-colors hidden sm:block">
-          <Github size={24} />
-        </a>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowRepoModal(true)}
+            className={`p-2 rounded-lg transition-all border ${
+              repoConfig.repo 
+                ? 'bg-gray-900 text-white border-gray-900 hover:bg-gray-800' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+            title="Configure GitHub Repository"
+          >
+            <div className="flex items-center gap-2">
+               <Github size={20} />
+               <Settings size={14} className={repoConfig.repo ? "opacity-50" : ""} />
+            </div>
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -329,12 +398,10 @@ const App: React.FC = () => {
 
                 {msg.role === 'model' && msg.structuredData && (
                   <div className="mt-2 animate-fade-in">
-                    {/* Small Inline Preview in Chat */}
                     {msg.structuredData.preview_content && (
                        <CodePreview code={msg.structuredData.preview_content} />
                     )}
 
-                    {/* Commit Card */}
                     {msg.structuredData.action === 'COMMIT' && (
                       <CommitCard 
                         data={msg.structuredData} 
@@ -357,7 +424,7 @@ const App: React.FC = () => {
               <div className="bg-white border border-gray-200 px-4 py-2 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-2">
                 <Loader2 size={16} className="animate-spin text-blue-500" />
                 <span className="text-xs text-gray-400 font-medium">
-                  Generating with <span className="font-semibold">{currentModel.name}</span>...
+                  Thinking... <span className="font-semibold">{currentModel.name}</span>
                 </span>
               </div>
             </div>
@@ -407,6 +474,7 @@ const App: React.FC = () => {
             placeholder={
               viewMode === 'preview' ? "Request changes to the preview..." : 
               viewMode === 'editor' ? "Ask for help with the code..." :
+              repoConfig.repo ? `Ask about ${repoConfig.repo}...` :
               `Ask ${currentModel.name} to build something...`
             }
             className="w-full pl-5 pr-14 py-4 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm placeholder:text-gray-400"
@@ -420,7 +488,7 @@ const App: React.FC = () => {
           </button>
         </form>
         <p className="text-center text-[10px] text-gray-400 mt-3">
-          Using {currentModel.name}. AI generated code can be incorrect.
+          Using {currentModel.name}. {repoConfig.repo ? `Context linked to ${repoConfig.owner}/${repoConfig.repo}.` : 'No repo linked.'}
         </p>
       </div>
     </div>
